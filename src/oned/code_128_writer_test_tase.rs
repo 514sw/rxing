@@ -35,9 +35,9 @@ const LF: &str = "10000110010";
 use once_cell::sync::Lazy;
 
 use crate::{
-    BarcodeFormat, DecodeHints, EncodeHintValue, EncodeHints, Writer,
+    BarcodeFormat, DecodeHints, EncodeHintValue, EncodeHints, Exceptions, Writer,
     common::{BitMatrix, Result, bit_matrix_test_case},
-    oned::{Code128Reader, OneDReader},
+    oned::{Code128Reader, OneDReader, OneDimensionalCodeWriter},
 };
 
 use super::Code128Writer;
@@ -143,10 +143,33 @@ fn testRoundtrip() {
 
 #[test]
 fn testLongCompact() {
-    //test longest possible input
-    let toEncode =
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-    encode(toEncode, true, toEncode).expect("encode");
+    for length in [80, 81, 82, 256, 4096] {
+        let toEncode = "a".repeat(length);
+        let result = encode(&toEncode, true, &toEncode).expect("encode");
+        assert_eq!(result.getWidth() as usize, 11 * length + 35 + 10);
+    }
+}
+
+#[test]
+fn testEncodeLongContentWithForcedCodeSet() {
+    for (codeSet, toEncode, symbols, startCode) in [
+        ("A", "A".repeat(81), 81, START_CODE_A),
+        ("B", "a".repeat(81), 81, START_CODE_B),
+        ("C", "12".repeat(41), 41, START_CODE_C),
+    ] {
+        let result = encodeWithForcedCodeSet(&toEncode, codeSet);
+        assert_eq!(result.getWidth(), 11 * symbols + 35 + 10);
+        let actual = bit_matrix_test_case::matrix_to_string(&result);
+        assert!(actual.starts_with(&format!("{QUIET_SPACE}{startCode}")));
+    }
+}
+
+#[test]
+fn testEncodeEmptyContent() {
+    assert!(matches!(
+        WRITER.encode_oned(""),
+        Err(Exceptions::IllegalArgumentException(_))
+    ));
 }
 
 #[test]
@@ -437,6 +460,18 @@ fn testEncodeWithForcedCodeSetFailureCodeSetB() {
 
     let actual = bit_matrix_test_case::matrix_to_string(&result);
     assert_eq!(expected, actual);
+}
+
+fn encodeWithForcedCodeSet(toEncode: &str, codeSet: &str) -> BitMatrix {
+    let hints = EncodeHints::default().with(EncodeHintValue::ForceCodeSet(codeSet.to_owned()));
+    let result = WRITER
+        .encode_with_hints(toEncode, &BarcodeFormat::CODE_128, 0, 0, &hints)
+        .expect("encode");
+    let decoded = Code128Reader
+        .decode_row(0, &result.getRow(0), &DecodeHints::default())
+        .expect("decode");
+    assert_eq!(toEncode, decoded.getText());
+    result
 }
 
 fn encode(toEncode: &str, compact: bool, expectedLoopback: &str) -> Result<BitMatrix> {
