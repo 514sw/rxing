@@ -343,6 +343,23 @@ fn testEncodeWithForcedCodeSetFailureCodeSetBBadCharacter() {
 }
 
 #[test]
+fn testEncodeWithForcedCodeSetBSpaces() {
+    let hints = EncodeHints::default().with(EncodeHintValue::ForceCodeSet("B".to_string()));
+    for toEncode in [" ", "Hello World 123", " Hello  World 123 "] {
+        let result = WRITER
+            .encode_with_hints(toEncode, &BarcodeFormat::CODE_128, 0, 0, &hints)
+            .expect("encode");
+        let decoded = Code128Reader
+            .decode_row(0, &result.getRow(0), &DecodeHints::default())
+            .expect("decode");
+        assert_eq!(toEncode, decoded.getText());
+        assert_eq!(result.getWidth() as usize, 11 * toEncode.len() + 35 + 10);
+        let actual = bit_matrix_test_case::matrix_to_string(&result);
+        assert!(actual.starts_with(&format!("{QUIET_SPACE}{START_CODE_B}")));
+    }
+}
+
+#[test]
 #[should_panic]
 fn testEncodeWithForcedCodeSetFailureCodeSetCBadCharactersNonNum() {
     let toEncode = "123a5678";
