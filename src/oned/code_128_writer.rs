@@ -94,12 +94,8 @@ impl OneDimensionalCodeWriter for Code128Writer {
 }
 
 fn check(contents: &str, hints: &crate::EncodeHints) -> Result<i32> {
-    let length = contents.chars().count();
-    // Check length
-    if !(1..=80).contains(&length) {
-        return Err(Exceptions::illegal_argument_with(format!(
-            "Contents length should be between 1 and 80 characters, but got {length}"
-        )));
+    if contents.is_empty() {
+        return Err(Exceptions::illegal_argument_with("Found empty contents"));
     }
 
     // Check for forced code set hint.
@@ -154,7 +150,7 @@ fn check(contents: &str, hints: &crate::EncodeHints) -> Result<i32> {
             CODE_CODE_B_I32 =>
             // allows no ascii below 32 (terminal symbols)
             {
-                if c <= 32 {
+                if c < 32 {
                     return Err(Exceptions::illegal_argument_with(format!(
                         "Bad character in input for forced code set B: ASCII value={c}"
                     )));
@@ -288,9 +284,9 @@ fn encodeFast(contents: &str, forcedCodeSet: i32) -> Result<Vec<bool>> {
         );
 
         // Compute checksum
-        checkSum += patternIndex * checkWeight;
+        checkSum = (checkSum + patternIndex * checkWeight) % 103;
         if position != 0 {
-            checkWeight += 1;
+            checkWeight = (checkWeight + 1) % 103;
         }
     }
 
@@ -429,7 +425,7 @@ fn chooseCode(value: &str, start: usize, oldCode: usize) -> Option<usize> {
 }
 
 /**
- * Encodes minimally using Divide-And-Conquer with Memoization
+ * Encodes minimally using bottom-up dynamic programming
  **/
 // struct MinimalEncoder {
 //    memoizedCost:Vec<Vec<u32>>,
@@ -474,7 +470,17 @@ stuvwxyz{|}~\u{007F}\u{00FF}";
         let mut memoizedCost = vec![vec![0_u32; length]; 4]; //new int[4][contents.length()];
         let mut minPath = vec![vec![Latch::None; length]; 4]; //new Latch[4][contents.length()];
 
-        encode_with_start_position(contents, Charset::None, 0, &mut memoizedCost, &mut minPath)?;
+        for position in (0..length).rev() {
+            for charset in [Charset::A, Charset::B, Charset::C, Charset::None] {
+                encode_with_start_position(
+                    contents,
+                    charset,
+                    position,
+                    &mut memoizedCost,
+                    &mut minPath,
+                )?;
+            }
+        }
 
         let mut patterns: Vec<Vec<usize>> = Vec::new(); //new ArrayList<>();
         let mut checkSum = vec![0_usize]; //new int[] {0};
@@ -625,9 +631,9 @@ stuvwxyz{|}~\u{007F}\u{00FF}";
                 .collect(),
         );
         if position != 0 {
-            checkWeight[0] += 1;
+            checkWeight[0] = (checkWeight[0] + 1) % 103;
         }
-        checkSum[0] += patternIndex * checkWeight[0] as usize;
+        checkSum[0] = (checkSum[0] + patternIndex * checkWeight[0] as usize) % 103;
     }
 
     fn isDigit(c: char) -> bool {
