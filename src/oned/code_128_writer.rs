@@ -154,7 +154,7 @@ fn check(contents: &str, hints: &crate::EncodeHints) -> Result<i32> {
             CODE_CODE_B_I32 =>
             // allows no ascii below 32 (terminal symbols)
             {
-                if c <= 32 {
+                if c < 32 {
                     return Err(Exceptions::illegal_argument_with(format!(
                         "Bad character in input for forced code set B: ASCII value={c}"
                     )));
